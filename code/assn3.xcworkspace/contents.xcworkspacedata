@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "group:disksearch.c">
+   </FileRef>
+   <FileRef
+      location = "group:disksim.c">
+   </FileRef>
+   <FileRef
+      location = "group:disksim.h">
+   </FileRef>
+   <FileRef
+      location = "group:fileops.c">
+   </FileRef>
+   <FileRef
+      location = "group:fileops.h">
+   </FileRef>
+   <FileRef
+      location = "group:index.c">
+   </FileRef>
+   <FileRef
+      location = "group:index.h">
+   </FileRef>
+   <FileRef
+      location = "group:indexlib.a">
+   </FileRef>
+   <FileRef
+      location = "group:Makefile">
+   </FileRef>
+   <FileRef
+      location = "group:pathstore.c">
+   </FileRef>
+   <FileRef
+      location = "group:pathstore.h">
+   </FileRef>
+   <FileRef
+      location = "group:scan.c">
+   </FileRef>
+   <FileRef
+      location = "group:scan.h">
+   </FileRef>
+   <FileRef
+      location = "group:cachemem.c">
+   </FileRef>
+   <FileRef
+      location = "group:cachemem.h">
+   </FileRef>
+   <FileRef
+      location = "group:debug.c">
+   </FileRef>
+   <FileRef
+      location = "group:debug.h">
+   </FileRef>
+   <FileRef
+      location = "group:diagnostic_test.sh">
+   </FileRef>
+   <FileRef
+      location = "group:diskimg.c">
+   </FileRef>
+   <FileRef
+      location = "group:diskimg.h">
+   </FileRef>
+</Workspace>
