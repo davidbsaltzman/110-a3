@@ -7,6 +7,9 @@
 
 #define BLOCK_ADDRESSES_PER_SECTOR (DISKIMG_SECTOR_SIZE / 2)
 
+int stored_inode_number = -1;
+struct inode stored_inode;
+
 /*
  * Fetch the specified inode from the filesystem. 
  * Return 0 on success, -1 on error.  
@@ -14,6 +17,12 @@
 int
 inode_iget(struct unixfilesystem *fs, int inumber, struct inode *inp)
 {
+  if (inumber == stored_inode_number)
+  {
+    *inp = stored_inode;
+    return 0;
+  }
+  
   struct inode inodeSector[16];
   
   for (int i = 0; i < fs->superblock.s_ninode; i++)
@@ -28,6 +37,10 @@ inode_iget(struct unixfilesystem *fs, int inumber, struct inode *inp)
   }
   
   *inp = inodeSector[(inumber - 1) % 16];
+  
+  stored_inode_number = inumber;
+  stored_inode = *inp;
+  
   return 0;
   
 }
