@@ -31,6 +31,7 @@ static uint64_t numisfiles = 0;
 static struct {
   char *pathname;    // absolute pathname NULL if slot is not used.
   int  cursor;       // Current position in the file
+  int inumber;
 } openFileTable[MAX_FILES];
 
 
@@ -79,6 +80,7 @@ Fileops_open(char *pathname)
   }
   openFileTable[fd].pathname = strdup(pathname); // Save our own copy
   openFileTable[fd].cursor = 0;
+  openFileTable[fd].inumber = inumber;
 
   return fd;
 }
@@ -90,7 +92,7 @@ Fileops_open(char *pathname)
 int
 Fileops_getchar(int fd)
 {
-  int inumber;
+//  int inumber;
   struct inode in;
   unsigned char buf[DISKIMG_SECTOR_SIZE];
   int bytesMoved;
@@ -102,12 +104,12 @@ Fileops_getchar(int fd)
   if (openFileTable[fd].pathname == NULL)
     return -1;  // fd not opened.
 
-  inumber = pathname_lookup(unixfs, openFileTable[fd].pathname);
-  if (inumber < 0) {
-    return inumber; // Can't find file
+//  inumber = pathname_lookup(unixfs, openFileTable[fd].pathname);
+  if (openFileTable[fd].inumber < 0) {
+    return openFileTable[fd].inumber; // Can't find file
   }
 
-  err = inode_iget(unixfs, inumber,&in);
+  err = inode_iget(unixfs, openFileTable[fd].inumber,&in);
   if (err < 0) {
     return err;
   }
@@ -122,7 +124,7 @@ Fileops_getchar(int fd)
   blockNo = openFileTable[fd].cursor / DISKIMG_SECTOR_SIZE;
   blockOffset =  openFileTable[fd].cursor % DISKIMG_SECTOR_SIZE;
 
-  bytesMoved = file_getblock(unixfs, inumber,blockNo,buf);
+  bytesMoved = file_getblock(unixfs, openFileTable[fd].inumber,blockNo,buf);
   if (bytesMoved < 0) {
     return -1;
   }
