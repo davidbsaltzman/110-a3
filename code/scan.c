@@ -63,7 +63,7 @@ Scan_File(char *inpathname, Index *ind, Pathstore *store, int discardDups)
     int offset = Fileops_tell(fd);
     int pos = 0;
     // read off the word until we hit the end of the word buffer
-    // or the end of the file or we hit an non-alpah characters
+    // or the end of the file or we hit an non-alpha characters
     char word[MAX_WORD_SIZE+1];
     while ((pos < MAX_WORD_SIZE) && !(ch < 0) && isalpha(ch)) {
       word[pos++] = ch;
