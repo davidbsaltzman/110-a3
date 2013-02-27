@@ -1,9 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 
 #include "inode.h"
 #include "diskimg.h"
+#include "../debug.h"
 
 #define BLOCK_ADDRESSES_PER_SECTOR (DISKIMG_SECTOR_SIZE / 2)
 
@@ -45,6 +47,11 @@ inode_iget(struct unixfilesystem *fs, int inumber, struct inode *inp)
   
 }
 
+int storedIndexSector1Num = -1;
+int storedIndexSector2Num = -1;
+uint16_t storedIndexSector1[BLOCK_ADDRESSES_PER_SECTOR];
+uint16_t storedIndexSector2[BLOCK_ADDRESSES_PER_SECTOR];
+
 /*
  * Get the location of the specified file block of the specified inode.
  * Return the disk block number on success, -1 on error.  
@@ -71,35 +78,69 @@ inode_indexlookup(struct unixfilesystem *fs, struct inode *inp, int blockNum)
     
     if (indirectBlockNum < 7) // singly indirect
     {
-      uint16_t fetchedBlock[BLOCK_ADDRESSES_PER_SECTOR];
-      
-      if (diskimg_readsector(fs->dfd, inp->i_addr[indirectBlockNum], &fetchedBlock) != DISKIMG_SECTOR_SIZE) {
-        fprintf(stderr, "Error reading indirect block\n");
-        return -1;
+      if (inp->i_addr[indirectBlockNum] == storedIndexSector1Num)
+      {DPRINTF('x',("single prestored: %d -> %d (%d)\n", storedIndexSector1Num, inp->i_addr[indirectBlockNum],blockNum));
+        blockAddress = storedIndexSector1[blockNum - (indirectBlockNum * BLOCK_ADDRESSES_PER_SECTOR)];
       }
-      
-      blockAddress = fetchedBlock[blockNum - (indirectBlockNum * BLOCK_ADDRESSES_PER_SECTOR)];
+      else
+      {DPRINTF('x',("single fetch %d -> %d\n", storedIndexSector1Num, inp->i_addr[indirectBlockNum]));
+        uint16_t fetchedBlock[BLOCK_ADDRESSES_PER_SECTOR];
+        
+        if (diskimg_readsector(fs->dfd, inp->i_addr[indirectBlockNum], &fetchedBlock) != DISKIMG_SECTOR_SIZE) {
+          fprintf(stderr, "Error reading indirect block\n");
+          return -1;
+        }
+        
+        blockAddress = fetchedBlock[blockNum - (indirectBlockNum * BLOCK_ADDRESSES_PER_SECTOR)];
+        
+        storedIndexSector1Num = inp->i_addr[indirectBlockNum];
+        memcpy(storedIndexSector1, fetchedBlock, DISKIMG_SECTOR_SIZE);
+      }
     }
     else // doubly indirect
     {
-      uint16_t firstFetchedBlock[BLOCK_ADDRESSES_PER_SECTOR];
-      
-      if (diskimg_readsector(fs->dfd, inp->i_addr[7], &firstFetchedBlock) != DISKIMG_SECTOR_SIZE) {
-        fprintf(stderr, "Error reading first doubly indirect block\n");
-        return -1;
-      }
-      
       int positionInFirstBlock = (blockNum - (7 * BLOCK_ADDRESSES_PER_SECTOR)) / BLOCK_ADDRESSES_PER_SECTOR;
-      int secondBlockAddress = firstFetchedBlock[positionInFirstBlock];
+      int secondBlockAddress;
       
-      uint16_t secondFetchedBlock[BLOCK_ADDRESSES_PER_SECTOR];
-      
-      if (diskimg_readsector(fs->dfd, secondBlockAddress, &secondFetchedBlock) != DISKIMG_SECTOR_SIZE) {
-        fprintf(stderr, "Error reading second doubly indirect block\n");
-        return -1;
+      if (inp->i_addr[7] == storedIndexSector1Num)
+      {DPRINTF('x',("double prestored - 1\n"));
+        secondBlockAddress = storedIndexSector1[positionInFirstBlock];
       }
-     
-      blockAddress = secondFetchedBlock[blockNum - (7 * BLOCK_ADDRESSES_PER_SECTOR) - positionInFirstBlock * BLOCK_ADDRESSES_PER_SECTOR];
+      else
+      {DPRINTF('x',("double fetch - 1\n"));
+        uint16_t firstFetchedBlock[BLOCK_ADDRESSES_PER_SECTOR];
+        
+        if (diskimg_readsector(fs->dfd, inp->i_addr[7], &firstFetchedBlock) != DISKIMG_SECTOR_SIZE) {
+          fprintf(stderr, "Error reading first doubly indirect block\n");
+          return -1;
+        }
+        
+        secondBlockAddress = firstFetchedBlock[positionInFirstBlock];
+        
+        storedIndexSector1Num = inp->i_addr[7];
+        memcpy(storedIndexSector1, firstFetchedBlock, DISKIMG_SECTOR_SIZE);
+      }
+      
+      int positionInSecondBlock = blockNum - (7 * BLOCK_ADDRESSES_PER_SECTOR) - positionInFirstBlock * BLOCK_ADDRESSES_PER_SECTOR;
+      
+      if (secondBlockAddress == storedIndexSector2Num)
+      {DPRINTF('x',("double prestored - 2\n"));
+        blockAddress = storedIndexSector2[positionInSecondBlock];
+      }
+      else
+      {DPRINTF('x',("double fetch - 2\n"));
+        uint16_t secondFetchedBlock[BLOCK_ADDRESSES_PER_SECTOR];
+        
+        if (diskimg_readsector(fs->dfd, secondBlockAddress, &secondFetchedBlock) != DISKIMG_SECTOR_SIZE) {
+          fprintf(stderr, "Error reading second doubly indirect block\n");
+          return -1;
+        }
+       
+        blockAddress = secondFetchedBlock[positionInSecondBlock];
+        
+        storedIndexSector2Num = secondBlockAddress;
+        memcpy(storedIndexSector2, secondFetchedBlock, DISKIMG_SECTOR_SIZE);
+      }
     }
   }
   
