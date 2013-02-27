@@ -7,7 +7,7 @@ typedef struct Pathstore {
 } Pathstore;
 
 Pathstore* Pathstore_create(void *fshandle);
-void       Pathstore_destory(Pathstore *store);
+void       Pathstore_destroy(Pathstore *store);
 char*      Pathstore_path(Pathstore *store, char *pathname,
                           int discardDuplicateFiles);
 

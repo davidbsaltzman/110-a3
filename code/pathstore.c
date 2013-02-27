@@ -18,7 +18,11 @@
 typedef struct PathstoreElement {
   char *pathname;
   struct PathstoreElement *nextElement;
+  char chksum[CHKSUMFILE_SIZE];
 } PathstoreElement;
+
+char currentChksum[CHKSUMFILE_SIZE];  // keep track of the chksum of the path being added
+int currentChksumComputed = 0;        // only calculate it if needed, and not more than once
 
 static uint64_t numdifferentfiles = 0;
 static uint64_t numsamefiles = 0;
@@ -28,7 +32,7 @@ static uint64_t numcompares = 0;
 static uint64_t numstores = 0;
 
 static int SameFileIsInStore(Pathstore *store, char *pathname);
-static int IsSameFile(Pathstore *store, char *pathname1, char *pathname2);
+static int IsSameFile(Pathstore *store, char *pathname1, PathstoreElement *e);
 
 Pathstore*
 Pathstore_create(void *fshandle)
@@ -47,7 +51,7 @@ Pathstore_create(void *fshandle)
  * Free up all the sources allocated for a pathstore.
  */
 void
-Pathstore_destory(Pathstore *store)
+Pathstore_destroy(Pathstore *store)
 {
   PathstoreElement *e = store->elementList;
 
@@ -90,6 +94,10 @@ Pathstore_path(Pathstore *store, char *pathname, int discardDuplicateFiles)
   e->nextElement = store->elementList;
   store->elementList = e;
 
+  if (currentChksumComputed) {
+    memcpy(e->chksum, currentChksum, CHKSUMFILE_SIZE);
+  }
+
   return e->pathname;
 
 }
@@ -100,10 +108,12 @@ Pathstore_path(Pathstore *store, char *pathname, int discardDuplicateFiles)
 static int
 SameFileIsInStore(Pathstore *store, char *pathname)
 {
+  currentChksumComputed = 0;
+  
   PathstoreElement *e = store->elementList;
 
   while (e) {
-    if (IsSameFile(store, pathname, e->pathname)) {
+    if (IsSameFile(store, pathname, e)) {
       return 1;  // In store already
     }
     e = e->nextElement;
@@ -115,33 +125,27 @@ SameFileIsInStore(Pathstore *store, char *pathname)
  * Do the two pathnames refer to a file with the same contents.
  */
 static int
-IsSameFile(Pathstore *store, char *pathname1, char *pathname2)
+IsSameFile(Pathstore *store, char *pathname1, PathstoreElement *e)
 {
-
-  char chksum1[CHKSUMFILE_SIZE],
-       chksum2[CHKSUMFILE_SIZE];
-
   struct unixfilesystem *fs = (struct unixfilesystem *) (store->fshandle);
 
   numcompares++;
-  if (strcmp(pathname1, pathname2) == 0) {
+  if (strcmp(pathname1, e->pathname) == 0) {
     return 1; // Same pathname must be same file.
   }
 
   /* Compute the chksumfile of each file to see if they are the same */
-
-  int err = chksumfile_bypathname(fs, pathname1, chksum1);
-  if (err < 0) {
-    fprintf(stderr,"Can't checksum path %s\n", pathname1);
-    return 0;
-  }
-  err = chksumfile_bypathname(fs, pathname2, chksum2);
-  if (err < 0) {
-    fprintf(stderr,"Can't checksum path %s\n", pathname2);
-    return 0;
+  if (!currentChksumComputed)
+  {
+    int err = chksumfile_bypathname(fs, pathname1, currentChksum);
+    if (err < 0) {
+      fprintf(stderr,"Can't checksum path %s\n", pathname1);
+      return 0;
+    }
+    currentChksumComputed = 1;
   }
 
-  if (chksumfile_compare(chksum1, chksum2) == 0) {
+  if (chksumfile_compare(currentChksum, e->chksum) == 0) {
     numdiffchecksum++;
     return 0;  // Checksum mismatch, not the same file
   }
@@ -152,10 +156,10 @@ IsSameFile(Pathstore *store, char *pathname1, char *pathname2)
     return 0;
   }
 
-  int fd2 = Fileops_open(pathname2);
+  int fd2 = Fileops_open(e->pathname);
   if (fd2 < 0) {
     Fileops_close(fd1);
-    fprintf(stderr, "Can't open path %s\n", pathname2);
+    fprintf(stderr, "Can't open path %s\n", e->pathname);
     return 0;
   }
 
