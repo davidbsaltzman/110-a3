@@ -1,0 +1,51 @@
+Design Document - David Saltzman
+
+Optimization #1: store most recent inode_iget
+
+1. When inode_iget is called, it now saves the most recently fetched inode and returns that inode instead of going to the disk when the most recently fetched inode is the desired inode.
+
+2. On running perf with the initial code, 68.02% of the time is spent in inode_iget and 31.98% of the time is spent in file_getblock.  So the biggest speed up would come from optimizing inode_iget.  Those calls come from Fileops_getchar, and it will be called repeatedly on the same inode.  So saving the most recently used inode eliminates these extra fetches.
+
+3. The savings will depend on the length of the word.  This initial test was run on the simple disk; the words being tested here are fooA...fooD, which are four characters long each.  So the speedup should be fourfold, so inode_iget should now take 17% of the original time, file_getblock still 32%, so the total code time should be 49% of the original time.  Then file_getblock will take 32/49 = 65% of the new system's time and inode_iget should take 35%.
+
+4.  This optimization was implemented and the number of IOs was reduced from 652 to 271 (so now takes 42% of the time, approximately in line with the prediction).  Perf reports that now inode_iget takes 18% of the running time, reduced from 68% before.
+
+Optimization #2: store inumber in openFileTable
+
+1. When a file is opened, look up its inumber and store it in the openFileTable.  Then do not look up the inumber again for that file.
+
+2. After optimization #1, Perf shows 82% of time is spent in file_getblock, 53% of which is from calls from pathname_lookup.  Most of these calls are repeats on the same file, and the inumber only needs to be looked up once.  Ideally much of this time could be cut out.
+
+3. 86% of the calls to pathname_lookup are in Fileops_getchar; none of those would be necessary if the inumber were already stored.  So the time savings should be 86% of 82%, or 70%.
+
+4. For the medium image, the number of IOs was reduced from 1827329 to 730947, or by 60%, approximately in line with predictions.  In addition, according to perf report, the amount of time on file_getblock went from 53% directory_findname (from pathname_lookup) to 11% directory_findname.
+
+Optimization #3: store most recent fetched block in file_getblock
+
+1. When file_getblock is called, it now saves the most recent block.  When the saved block is requested, it is returned without going to disk.  When a new block is requested, the new block is saved, overwriting the previous saved block.
+
+2. Perf report indicated that 79% of the time was spend on file_getblock, 81% of which was from fileops_getchar.  This is called on the same block repeatedly as the characters are being advanced.  Instead of repeatedly reading the same block from disk, saving it will greatly reduce the time.
+
+3. Each block has 512 bytes (or characters), so rather than loading each block from disk 512 times, it is now only read once.  This would result in a speedup 512-fold, or 99.8%.
+
+4. The number of IOs for the medium image is reduced from 730947 to 1436, or 99.8%, exactly as predicted.
+
+Optimization #4: store the most recent inode index blocks
+
+1. In inode_indexlookup, depending on how many blocks are in a file, one or two disk reads might be required.  Now when an indirect lookup is performed, the block of addresses is stored.  When a doubly indirect lookup is performed, the block of addresses of blocks of addresses and the block of addresses is stored.  If a lookup would read the most recent block (or most recent indirect block), it instead uses the saved block.  When reading a new block is necessary, the new block overwrites the previously saved block.
+
+2. According to perf report for the large image, 51% of the time was spent in file_getblock and 49% in inode_indexlookup.  So optimizing either would be helpful.  Printing out the sector reads shows that inode_indexlookup read the same block many times in a row.  If the most recent was stored, it would only have to be read once, so much of that 49% would be cut out.
+
+3. There are 256 addresses per block, so inode_indexlookup repeats each block up to 256 times in a row.  So the savings should be up to 255/256 = 99.6% of the inode_indexlookups.  This would cut the number of operations by 49%*99.6%~=49%.
+
+4. This optimization was performed, and the number of IOs in the large image was reduced from 4897 to 2245, or 54%, approximately in line with predictions.  In addition, perf reported that now 99.4% of the time was spent in file_getblock, confirming that most of the time in inode_indexlookup was indeed cut out.
+
+Optimization #5: Don't compute each chksum more than once
+
+1. In pathstore, when a new file is added, it is compared to all the other files to ensure that it is unique.  Previously, the checksum of each file is recomputed every check; now the checksums are stored in the respective pathstore elements so only computed once.
+
+2. Perf report indicated that for the vlarge image, 81% of the time was spent in chksumfile_by_inumber.  It is clear from the code that these checksums are repeatedly recomputed (involving reading the whole file from disk), where they only actually need to be computed once.
+
+3. Eliminating almost all of this time would cut down on the number of IOs by about 81% for the vlarge disk; it would have no effect on medium or large disks because these only have one file each so no checksums are computed either way.
+
+4. Implementing this optimization reduced the number of IOs in the vlarge image from 35543633 to 97461, or by 99.3%.  This is much more than indicated by the perf report, though does make sense because as the number of files grow, recomputing each checksum for each new file caused exponential number of reads with the number of files; now it is linear.  The number of reads in medium and large images is not affected, as expected.  After optimization, perf report showed that for the vlarge image the amount of time spent in chksumfile_byinumber was reduced to about 40%.
