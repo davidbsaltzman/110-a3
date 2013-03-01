@@ -49,3 +49,16 @@ Optimization #5: Don't compute each chksum more than once
 3. Eliminating almost all of this time would cut down on the number of IOs by about 81% for the vlarge disk; it would have no effect on medium or large disks because these only have one file each so no checksums are computed either way.
 
 4. Implementing this optimization reduced the number of IOs in the vlarge image from 35543633 to 97461, or by 99.3%.  This is much more than indicated by the perf report, though does make sense because as the number of files grow, recomputing each checksum for each new file caused exponential number of reads with the number of files; now it is linear.  The number of reads in medium and large images is not affected, as expected.  After optimization, perf report showed that for the vlarge image the amount of time spent in chksumfile_byinumber was reduced to about 40%.
+
+Final Performace:
+
+simple.img: 8ms * 29 IOs + 0.001413 usertime + 0.001684 systemtime
+           = 235 ms
+medium.img: 8ms * 725 IOs + 0.045814 usertime + 0.006470 systemtime
+           = 5.85 sec
+large.img:  8ms * 2245 IOs + 0.130576 usertime + 0.023680 systemtime
+           = 18.11 sec
+vlarge.img: 8ms * 97461 IOs + 1.266259 usertime + 0.150521 systemtime
+           = 781.1 sec
+manyfiles.img: 8ms * 3127843 IOs + 2.566762 usertime + 2.619010 systemtime
+           = 25028 sec
